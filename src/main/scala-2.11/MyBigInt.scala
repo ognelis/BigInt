@@ -1,20 +1,19 @@
 import scala.annotation.tailrec
 
-/**
-  * Created by Admin on 08.01.2017.
-  */
 class MyBigInt extends Ordered[MyBigInt]{
-  private var buf = Array[Byte]()
-  private var sign: Boolean = true
+  var buf = Array[Byte]()
+  var sign: Boolean = true
 
   def this(str: String) = {
     this()
+    if (str.isEmpty) {
+      sign = true
+      buf = Array[Byte]()
+    } else
     if (str.head == '-') {
       sign = false
       buf = str.tail.map(ch => java.lang.Byte.parseByte(ch.toString)).toArray
-    } else {
-      buf = str.map(ch => java.lang.Byte.parseByte(ch.toString)).toArray
-    }
+    } else buf = str.map(ch => java.lang.Byte.parseByte(ch.toString)).toArray
   }
 
   private def this(buf: Array[Byte], sign: Boolean) = {
@@ -26,7 +25,7 @@ class MyBigInt extends Ordered[MyBigInt]{
   override def compare(that: MyBigInt): Int = {
     if (this.sign == that.sign) {
       compareOnlyDigits(that)
-    } else if (this.sign) 1 else -1
+    } else if (this.sign) 1 else 0
   }
 
   private def compareOnlyDigits(thisBigInt: MyBigInt, that: MyBigInt): Int = {
@@ -43,7 +42,11 @@ class MyBigInt extends Ordered[MyBigInt]{
         else if (a < b) -1
         else helper(tail)
     }
-    if (thisBigInt.buf.length > that.buf.length) 1
+
+    if (thisBigInt.buf.isEmpty && that.buf.isEmpty) 0
+    else if (that.buf.isEmpty) 1
+    else if (thisBigInt.buf.isEmpty) -1
+    else if (thisBigInt.buf.length > that.buf.length) 1
     else if (thisBigInt.buf.length < that.buf.length) -1
     else helper((thisBigInt.buf zip that.buf).toList)
   }
@@ -95,6 +98,7 @@ class MyBigInt extends Ordered[MyBigInt]{
     new MyBigInt(result.splitAt(result.indexWhere(_ != 0))._2, newSign)
   }
 
+
   private def multiplication(a: Array[Byte], b: Array[Byte], newSign: Boolean): MyBigInt = {
     val aReverse = a.reverse
     val bReverse = b.reverse
@@ -103,7 +107,7 @@ class MyBigInt extends Ordered[MyBigInt]{
       val multi = aReverse.map { aElem =>
         val newValue = bElem * aElem
         val result = ((newValue + div) % 10).toByte
-        div = newValue / 10
+        div = (newValue + div) / 10
         result
       }
       if (div != 0) div.toByte +: (multi.reverse ++ Array.fill(index)(0: Byte)) else multi.reverse ++ Array.fill(index)(0: Byte)
@@ -142,28 +146,44 @@ class MyBigInt extends Ordered[MyBigInt]{
   def /% (that: MyBigInt): (MyBigInt, MyBigInt) = {
     val aUnsigned = new MyBigInt(this.buf, true)
     val bUnsigned = new MyBigInt(that.buf, true)
+
     @tailrec
-    def helper(a: MyBigInt, b: MyBigInt, acc: MyBigInt):(MyBigInt, MyBigInt) = {
+    def divideAndReminder(a: MyBigInt, b: MyBigInt, acc: MyBigInt):(MyBigInt, MyBigInt) = {
       val aMinusB = a - b
-      if (aMinusB.sign) helper(aMinusB, b, acc + new MyBigInt("1")) else (acc, a)
+      if (aMinusB.sign) divideAndReminder(aMinusB, b, acc + new MyBigInt("1"))
+      else if (a.buf.sameElements(b.buf)) (acc + new MyBigInt("1"), new MyBigInt("0"))
+      else (acc, a)
     }
-    helper(aUnsigned, bUnsigned, new MyBigInt("0"))
+
+    @tailrec
+    def divide(a: MyBigInt, b:MyBigInt, div: MyBigInt, mod: MyBigInt): (MyBigInt, MyBigInt) = {
+      if (b < that) (div, mod)
+      else {
+        val (divadable, divisor) = divideAndReminder(a, b, new MyBigInt("0"))
+        divide(divisor, new MyBigInt(b.buf.dropRight(1),div.sign), new MyBigInt(div.buf ++ divadable.buf ,div.sign), divisor)
+      }
+    }
+
+    if (aUnsigned < bUnsigned) (new MyBigInt("0"), bUnsigned)
+    else divide (aUnsigned, new MyBigInt(bUnsigned.buf ++ Array.fill(aUnsigned.buf.length - bUnsigned.buf.length)(0: Byte),bUnsigned.sign), new MyBigInt(""), new MyBigInt(""))
+  }
+
+  override def equals(that: scala.Any): Boolean = that match {
+    case bigInt: MyBigInt if this.sign == bigInt.sign => this.buf sameElements bigInt.buf
+    case _ => false
   }
 
   override def toString: String = if(sign) buf.mkString else "-" ++ buf.mkString
 }
 
 object MyBigInt extends App {
-  val a  = new MyBigInt("1000000")
-  val b = new MyBigInt("123123")
-  val c = new MyBigInt("3")
-
+  val a  = new MyBigInt("11343123123123")
+  val b = new MyBigInt("11343123123123")
+  val c = new MyBigInt("5")
   val x = a*b + c
-
-  println(s"x is: $x")
 
   val res = x /% b
   val (div, mod) = (res._1, res._2)
-  println(s"$x div $b -> $a == $div")
+  println(s"$x div $b -> $div == $a")
   println(s"$x mod $b -> $c == $mod")
 }
